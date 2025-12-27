@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated, Dimensions, useColorScheme, Text } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions, useColorScheme, Text, Easing } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,21 +44,25 @@ export default function SplashScreen() {
     Animated.timing(progressAnim, {
       toValue: 100,
       duration: 2000,
+      easing: Easing.linear,
       useNativeDriver: false,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) {
+        progressAnim.setValue(100);
+        setProgress(100);
+      }
+    });
 
-    // Update percentage text
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 1;
-      });
-    }, 20); // Update every 20ms to reach 100% in 2 seconds
+    // Listen to animated value and map to integer percent
+    const id = progressAnim.addListener(({ value }) => {
+      const pct = Math.max(0, Math.min(100, Math.round(value)));
+      setProgress(pct);
+    });
 
-    return () => clearInterval(interval);
+    return () => {
+      progressAnim.removeListener(id);
+      progressAnim.stopAnimation();
+    };
   }, [fadeAnim, scaleAnim, slideAnim, progressAnim]);
 
   const backgroundColor = colorScheme === 'dark' ? '#0A1929' : '#E6F4FE';
@@ -95,10 +99,7 @@ export default function SplashScreen() {
         ]}
       >
         <Text style={[styles.brandName, isDark ? styles.textDark : styles.textLight]}>
-          ADUSTECH
-        </Text>
-        <Text style={[styles.tagline, isDark ? styles.subtextDark : styles.subtextLight]}>
-          Innovation Simplified
+          Welcome to ADUSTECH Family
         </Text>
       </Animated.View>
 

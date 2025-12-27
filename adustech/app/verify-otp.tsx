@@ -1,18 +1,20 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
   useColorScheme,
+  Pressable,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 export default function VerifyOTPScreen() {
   const params = useLocalSearchParams();
@@ -25,25 +27,26 @@ export default function VerifyOTPScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const handleVerifyOTP = async () => {
-    if (!otp || otp.length !== 6) {
-      Alert.alert('Error', 'Please enter a valid 6-digit OTP');
-      return;
-    }
-
+  const handleVerifyOTPWith = useCallback(async (code: string) => {
+    if (!code || code.length !== 6) return;
+    if (loading || resending) return;
     setLoading(true);
-    const result = await verifyOTP(email, otp);
+    const result = await verifyOTP(email, code);
     setLoading(false);
-
     if (result.success) {
       Alert.alert('Success', 'Email verified successfully! You can now log in.');
       router.replace('/login');
     } else {
       Alert.alert('Verification Failed', result.message || 'Invalid or expired OTP');
     }
+  }, [email, loading, resending, verifyOTP, router]);
+
+  const handleVerifyOTP = async () => {
+    await handleVerifyOTPWith(otp);
   };
 
   const handleResendOTP = async () => {
+    if (loading || resending) return;
     setResending(true);
     const result = await resendOTP(email);
     setResending(false);
@@ -55,6 +58,7 @@ export default function VerifyOTPScreen() {
       Alert.alert('Error', result.message || 'Failed to resend OTP');
     }
   };
+
 
   return (
     <KeyboardAvoidingView
@@ -91,7 +95,14 @@ export default function VerifyOTPScreen() {
             placeholder="000000"
             placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
             value={otp}
-            onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            onChangeText={(text) => {
+              const next = text.replace(/[^0-9]/g, '').slice(0, 6);
+              setOtp(next);
+              if (next.length === 6) {
+                // Auto submit when code is complete
+                handleVerifyOTPWith(next);
+              }
+            }}
             keyboardType="number-pad"
             maxLength={6}
             editable={!loading && !resending}
