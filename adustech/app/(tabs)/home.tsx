@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image, ScrollView, Platform, StatusBar } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 interface Post {
@@ -18,16 +18,23 @@ interface Post {
 
 const CATEGORIES = ['All','Level','Department','Exam','Timetable','Event'];
 
+import { useRouter } from 'expo-router';
+
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('All');
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
   const [posts, setPosts] = useState<Post[]>([{
     id: '1', author: 'Ada Lovelace', category: 'Department', title: 'New Lab Resources', content: 'CS department just added new lab machines. Book your slot!', likes: 12, reposts: 3, comments: 5,
+    image: 'https://picsum.photos/seed/lab/800/500'
   }, {
     id: '2', author: 'Exam Office', category: 'Exam', title: 'Mid-Sem Schedule', content: 'Mid-semester exam timetable will be out on Friday 10 AM.', likes: 45, reposts: 12, comments: 30,
   }, {
     id: '3', author: 'Student Union', category: 'Event', title: 'Tech Fest 2026', content: 'Join us for hackathons, talks, and merch giveaways this weekend!', likes: 64, reposts: 18, comments: 41,
+    image: 'https://picsum.photos/seed/fest/800/500'
   }, {
     id: '4', author: 'Level Coordinator', category: 'Level', title: '400L Project Briefing', content: 'Mandatory briefing for 400L students on capstone projects.', likes: 23, reposts: 7, comments: 10,
   }] );
@@ -55,9 +62,12 @@ export default function HomeScreen() {
   const muted = isDark ? '#90CAF9' : '#607D8B';
   const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
 
+  const goToDetail = (item: Post) => {
+    router.push({ pathname: '/post/[id]', params: { id: item.id, title: item.title, author: item.author, content: item.content, image: item.image || '' } });
+  };
+
   const renderItem = ({ item }: { item: Post }) => (
-    <View style={[styles.post, { backgroundColor: card, borderColor: border }]}>
-      <View style={styles.postHeader}>
+    <TouchableOpacity onPress={() => goToDetail(item)} activeOpacity={0.8} style={[styles.post, { backgroundColor: card, borderColor: border }]}>      <View style={styles.postHeader}>
         <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
           <Text style={{ color: '#fff', fontWeight: '800' }}>{item.author.charAt(0)}</Text>
         </View>
@@ -70,7 +80,8 @@ export default function HomeScreen() {
       {item.image && (
         <Image source={{ uri: item.image }} style={styles.postImage} />
       )}
-      <View style={styles.postActions}>
+      <View style={styles.postActions} onStartShouldSetResponder={() => true}>
+        {/* prevent parent touch from triggering navigation when pressing actions */}
         <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(item.id)}>
           <Ionicons name={item.liked ? 'heart' : 'heart-outline'} size={18} color={item.liked ? '#E53935' : muted} />
           <Text style={[styles.count, { color: muted }]}>{item.likes}</Text>
@@ -90,6 +101,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}> 
       {/* Header (non-scroll) */}
+      <View style={{ height: (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 12) }} />
       <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: border }]}> 
         <Text style={[styles.logo, { color: textPrimary }]}>ADUSTECH</Text>
         <TouchableOpacity accessibilityRole="button">
@@ -102,9 +114,29 @@ export default function HomeScreen() {
         data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 12, paddingBottom: 32 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 96 }}
+        refreshing={refreshing}
+        onRefresh={() => {
+          setRefreshing(true);
+          setTimeout(() => {
+            // Simulate refresh by shuffling
+            setPosts((prev) => [...prev].reverse());
+            setRefreshing(false);
+          }, 800);
+        }}
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          // Simulate infinite scroll by appending demo posts
+          setPage((p) => p + 1);
+          const nid = (posts.length + 1).toString();
+          setPosts((prev) => [
+            ...prev,
+            { id: nid, author: 'Campus News', category: 'Event', title: `Campus Update #${nid}`, content: 'New updates around campus. Stay tuned!', likes: 0, reposts: 0, comments: 0, image: (parseInt(nid)%2===0 ? `https://picsum.photos/seed/${nid}/800/500` : undefined) },
+          ]);
+        }}
+        stickyHeaderIndices={[0]}
         ListHeaderComponent={
-          <View>
+          <View style={{ backgroundColor: headerBg }}> 
             <View style={[styles.searchWrap, { backgroundColor: headerBg, borderColor: border }]}> 
               <Ionicons name="search" color={muted} size={16} />
               <TextInput
@@ -120,13 +152,18 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.chipsRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.chipsRow, { paddingRight: 8 }]}
+            >
               {CATEGORIES.map(cat => (
-                <TouchableOpacity key={cat} onPress={() => setActiveCat(cat)} style={[styles.chip, activeCat === cat && styles.chipActive, { borderColor: border }]}>
+                <TouchableOpacity key={cat} onPress={() => setActiveCat(cat)} style={[styles.chip, activeCat === cat && styles.chipActive, { borderColor: border }]}
+                >
                   <Text style={[styles.chipText, { color: activeCat === cat ? (isDark ? '#FFFFFF' : '#1976D2') : muted }]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
         }
       />
@@ -163,7 +200,7 @@ const styles = StyleSheet.create({
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   postTitle: { fontWeight: '800', fontSize: 15 },
-  postImage: { marginTop: 8, height: 160, borderRadius: 12 },
+  postImage: { marginTop: 8, height: 200, borderRadius: 12, width: '100%' },
   postActions: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 16 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
   count: { fontSize: 12 },

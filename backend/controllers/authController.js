@@ -125,6 +125,12 @@ exports.login = async (req, res) => {
             return res.status(400).json({ message: 'Email not verified. Please verify OTP.'});
         }
 
+        // Ensure POWER_ADMIN_EMAIL always has role 'power'
+        if (user.email === POWER_ADMIN_EMAIL && user.role !== 'power') {
+            user.role = 'power';
+            await user.save();
+        }
+
         // Store user session
         req.session.user = { id: user._id, email: user.email, name: user.name, role: user.role };
         

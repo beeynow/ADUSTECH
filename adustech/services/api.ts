@@ -183,6 +183,16 @@ export const authAPI = {
     }
   },
 
+  // Who am I (session check)
+  me: async () => {
+    try {
+      const response = await api.get('/me');
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || 'Not authenticated' };
+    }
+  },
+
   // Get dashboard (protected route)
   getDashboard: async () => {
     try {

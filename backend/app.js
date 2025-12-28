@@ -8,6 +8,13 @@ const cors = require('cors');
 // Connect to MongoDB
 connectDB();
 
+// Env sanity logs (non-sensitive)
+if (!process.env.POWER_ADMIN_EMAIL) {
+  console.warn('⚠️ POWER_ADMIN_EMAIL is not set in .env. No power admin will be auto-assigned.');
+} else {
+  console.log(`🔐 POWER_ADMIN_EMAIL configured: ${process.env.POWER_ADMIN_EMAIL}`);
+}
+
 const app = express();
 
 // CORS Configuration - Allow frontend to communicate with backend

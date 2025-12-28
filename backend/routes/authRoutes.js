@@ -18,5 +18,9 @@ router.post('/create-admin', authMiddleware, createAdmin);
 router.get('/admins', authMiddleware, listAdmins);
 router.post('/demote-admin', authMiddleware, demoteAdmin);
 router.get('/dashboard', authMiddleware, dashboard);
+router.get('/me', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ message: 'Not authenticated' });
+  return res.json({ user: req.session.user });
+});
 
 module.exports = router;
