@@ -1,21 +1,43 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, useColorScheme, Image, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { postsAPI } from '../../services/postsApi';
 
-interface CommentItem { id: string; author: string; text: string; }
+interface CommentItem { id: string; author: string; text: string; likes?: number; liked?: boolean; }
 
 export default function PostDetail() {
   const isDark = useColorScheme() === 'dark';
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { id, title, author, content, image } = params as Record<string, string>;
+  const { id } = params as Record<string, string>;
+  const [pTitle, setPTitle] = useState('');
+  const [pAuthor, setPAuthor] = useState('');
+  const [pContent, setPContent] = useState('');
+  const [pImage, setPImage] = useState<string | undefined>(undefined);
 
-  const [comments, setComments] = useState<CommentItem[]>([
-    { id: '1', author: 'Alice', text: 'Great update!' },
-    { id: '2', author: 'Bob', text: 'Looking forward to it.' },
-  ]);
+  const [comments, setComments] = useState<CommentItem[]>([]);
   const [text, setText] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const postRes = await postsAPI.get(id as string);
+        const post = postRes.post;
+        setPTitle(post.text?.slice(0, 80) || 'Post');
+        setPAuthor(post.userName || '');
+        setPContent(post.text || '');
+        setPImage(post.imageUrl || post.imageBase64 || undefined);
+      } catch (e) {
+        // fallback remains empty
+      }
+      try {
+        const data = await postsAPI.listComments(id as string);
+        const mapped = (data.comments || []).map((c: any) => ({ id: c._id, author: c.userName, text: c.text, likes: (c.likes||[]).length }));
+        setComments(mapped);
+      } catch (e) {}
+    })();
+  }, [id]);
 
   const card = isDark ? '#0F213A' : '#FFFFFF';
   const bg = isDark ? '#0A1929' : '#E6F4FE';
@@ -40,10 +62,10 @@ export default function PostDetail() {
           ListHeaderComponent={
             <View style={{ padding: 12 }}>
               <View style={[styles.card, { backgroundColor: card }]}> 
-                <Text style={[styles.title, { color: textPrimary }]}>{title}</Text>
-                <Text style={{ color: muted, marginTop: 2 }}>{author}</Text>
-                {!!image && <Image source={{ uri: image }} style={styles.image} />}
-                <Text style={{ color: muted, marginTop: 8 }}>{content}</Text>
+                <Text style={[styles.title, { color: textPrimary }]}>{pTitle}</Text>
+                <Text style={{ color: muted, marginTop: 2 }}>{pAuthor}</Text>
+                {!!pImage && <Image source={{ uri: pImage }} style={styles.image} />}
+                <Text style={{ color: muted, marginTop: 8 }}>{pContent}</Text>
               </View>
               <Text style={[styles.commentsHeading, { color: textPrimary }]}>Comments</Text>
             </View>
@@ -57,6 +79,18 @@ export default function PostDetail() {
                 <Text style={[styles.commentAuthor, { color: textPrimary }]}>{item.author}</Text>
                 <Text style={{ color: muted }}>{item.text}</Text>
               </View>
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    const res = await postsAPI.toggleLikeComment(id as string, item.id);
+                    setComments(prev => prev.map(c => c.id === item.id ? { ...c, likes: res.likes } : c));
+                  } catch {}
+                }}
+                style={{ padding: 8 }}
+              >
+                <Ionicons name="heart-outline" size={18} color={isDark ? '#FFCDD2' : '#C62828'} />
+                <Text style={{ color: muted, fontSize: 12, textAlign: 'center' }}>{item.likes || 0}</Text>
+              </TouchableOpacity>
             </View>
           )}
           contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 88 }}
@@ -69,10 +103,14 @@ export default function PostDetail() {
             placeholder="Add a comment..." placeholderTextColor={muted}
           />
           <TouchableOpacity
-            onPress={() => {
+            onPress={async () => {
               if (!text.trim()) return;
-              setComments(prev => [...prev, { id: (prev.length+1).toString(), author: 'You', text }]);
-              setText('');
+              try {
+                const res = await postsAPI.addComment(id as string, text);
+                const c = res.comment;
+                setComments(prev => [...prev, { id: c._id, author: c.userName, text: c.text, likes: 0 }]);
+                setText('');
+              } catch (e) {}
             }}
             style={styles.sendBtn}
           >

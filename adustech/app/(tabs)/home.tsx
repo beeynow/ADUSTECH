@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image, ScrollView, Platform, StatusBar } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { postsAPI } from '../../services/postsApi';
 
 interface Post {
   id: string;
@@ -27,17 +28,30 @@ export default function HomeScreen() {
   const [activeCat, setActiveCat] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
-  const [posts, setPosts] = useState<Post[]>([{
-    id: '1', author: 'Ada Lovelace', category: 'Department', title: 'New Lab Resources', content: 'CS department just added new lab machines. Book your slot!', likes: 12, reposts: 3, comments: 5,
-    image: 'https://picsum.photos/seed/lab/800/500'
-  }, {
-    id: '2', author: 'Exam Office', category: 'Exam', title: 'Mid-Sem Schedule', content: 'Mid-semester exam timetable will be out on Friday 10 AM.', likes: 45, reposts: 12, comments: 30,
-  }, {
-    id: '3', author: 'Student Union', category: 'Event', title: 'Tech Fest 2026', content: 'Join us for hackathons, talks, and merch giveaways this weekend!', likes: 64, reposts: 18, comments: 41,
-    image: 'https://picsum.photos/seed/fest/800/500'
-  }, {
-    id: '4', author: 'Level Coordinator', category: 'Level', title: '400L Project Briefing', content: 'Mandatory briefing for 400L students on capstone projects.', likes: 23, reposts: 7, comments: 10,
-  }] );
+  const [posts, setPosts] = useState<Post[]>([] as any);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await postsAPI.list({ page: 1, limit: 10, category: activeCat !== 'All' ? activeCat : undefined, q: search || undefined });
+        const mapped = (data.posts || []).map((p: any) => ({
+          id: p._id,
+          author: p.userName,
+          category: p.category || 'All',
+          title: p.text?.slice(0,40) || 'Post',
+          content: p.text || '',
+          image: p.imageBase64 || undefined,
+          likes: (p.likes || []).length,
+          reposts: 0,
+          comments: (p.comments || []).length,
+          liked: false,
+        }));
+        setPosts(mapped);
+      } catch (e) {
+        // fallback stays empty
+      }
+    })();
+  }, [activeCat, search]);
 
   const filtered = useMemo(() => {
     let list = posts;
@@ -49,8 +63,9 @@ export default function HomeScreen() {
     return list;
   }, [posts, activeCat, search]);
 
-  const toggleLike = (id: string) => {
+  const toggleLike = async (id: string) => {
     setPosts(prev => prev.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p));
+    try { await postsAPI.toggleLike(id); } catch {}
   };
   const incRepost = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: p.reposts + 1 } : p));
   const incComment = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: p.comments + 1 } : p));
@@ -90,13 +105,39 @@ export default function HomeScreen() {
           <Ionicons name="repeat" size={18} color={muted} />
           <Text style={[styles.count, { color: muted }]}>{item.reposts}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => incComment(item.id)}>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item.id)}>
           <Ionicons name="chatbubble-ellipses-outline" size={18} color={muted} />
           <Text style={[styles.count, { color: muted }]}>{item.comments}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  const [commentsVisible, setCommentsVisible] = useState(false);
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [sheetComments, setSheetComments] = useState<Array<{ id: string; author: string; text: string; likes?: number }>>([]);
+  const [sheetText, setSheetText] = useState('');
+
+  const openComments = async (postId: string) => {
+    setActivePostId(postId);
+    setCommentsVisible(true);
+    try {
+      const data = await postsAPI.listComments(postId);
+      const mapped = (data.comments || []).map((c: any) => ({ id: c._id, author: c.userName, text: c.text, likes: (c.likes||[]).length }));
+      setSheetComments(mapped);
+    } catch (e) { setSheetComments([]); }
+  };
+
+  const addSheetComment = async () => {
+    if (!sheetText.trim() || !activePostId) return;
+    try {
+      const res = await postsAPI.addComment(activePostId, sheetText);
+      const c = res.comment;
+      setSheetComments(prev => [...prev, { id: c._id, author: c.userName, text: c.text, likes: 0 }]);
+      setSheetText('');
+      setPosts(prev => prev.map(p => p.id === activePostId ? { ...p, comments: p.comments + 1 } : p));
+    } catch (e) {}
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}> 
@@ -128,11 +169,23 @@ export default function HomeScreen() {
         onEndReached={() => {
           // Simulate infinite scroll by appending demo posts
           setPage((p) => p + 1);
-          const nid = (posts.length + 1).toString();
-          setPosts((prev) => [
-            ...prev,
-            { id: nid, author: 'Campus News', category: 'Event', title: `Campus Update #${nid}`, content: 'New updates around campus. Stay tuned!', likes: 0, reposts: 0, comments: 0, image: (parseInt(nid)%2===0 ? `https://picsum.photos/seed/${nid}/800/500` : undefined) },
-          ]);
+          try {
+            const data = await postsAPI.list({ page: page + 1, limit: 10, category: activeCat !== 'All' ? activeCat : undefined, q: search || undefined });
+            const mapped = (data.posts || []).map((p: any) => ({
+              id: p._id,
+              author: p.userName,
+              category: p.category || 'All',
+              title: p.text?.slice(0,40) || 'Post',
+              content: p.text || '',
+              image: p.imageBase64 || undefined,
+              likes: (p.likes || []).length,
+              reposts: 0,
+              comments: (p.comments || []).length,
+              liked: false,
+            }));
+            setPosts(prev => [...prev, ...mapped]);
+          } catch (e) {}
+          
         }}
         stickyHeaderIndices={[0]}
         ListHeaderComponent={
@@ -167,6 +220,44 @@ export default function HomeScreen() {
           </View>
         }
       />
+
+      {/* Comment Bottom Sheet */}
+      {commentsVisible && (
+        <View style={styles.sheetWrap}>
+          <View style={styles.sheetHeader}>
+            <Text style={[styles.sheetTitle, { color: textPrimary }]}>Comments</Text>
+            <TouchableOpacity onPress={() => setCommentsVisible(false)}>
+              <Ionicons name="close" size={22} color={isDark ? '#64B5F6' : '#1976D2'} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={sheetComments}
+            keyExtractor={(i) => i.id}
+            renderItem={({ item }) => (
+              <View style={styles.sheetComment}>
+                <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>{item.author.charAt(0)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: textPrimary, fontWeight: '700' }}>{item.author}</Text>
+                  <Text style={{ color: muted }}>{item.text}</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Ionicons name="heart-outline" size={18} color={isDark ? '#FFCDD2' : '#C62828'} />
+                  <Text style={{ color: muted, fontSize: 12 }}>{item.likes || 0}</Text>
+                </View>
+              </View>
+            )}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 64 }}
+          />
+          <View style={[styles.sheetComposer, { borderTopColor: border }]}> 
+            <TextInput value={sheetText} onChangeText={setSheetText} placeholder="Add a comment..." placeholderTextColor={muted} style={[styles.sheetInput, { color: textPrimary }]} />
+            <TouchableOpacity onPress={addSheetComment}>
+              <Ionicons name="send" size={18} color={isDark ? '#64B5F6' : '#1976D2'} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -204,4 +295,11 @@ const styles = StyleSheet.create({
   postActions: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 16 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
   count: { fontSize: 12 },
+
+  sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, top: '30%', backgroundColor: isDark ? '#0F213A' : '#FFFFFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 12 },
+  sheetHeader: { height: 50, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)' },
+  sheetTitle: { fontWeight: '800' },
+  sheetComment: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  sheetComposer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 56, borderTopWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
+  sheetInput: { flex: 1, height: 40 },
 });

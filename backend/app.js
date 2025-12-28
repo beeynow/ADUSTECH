@@ -23,7 +23,8 @@ app.use(cors({
   credentials: true, // Allow cookies to be sent
 }));
 
-app.use(express.json()); // Middleware to parse JSON
+app.use(express.json({ limit: '15mb' })); // Middleware to parse JSON (support base64 images)
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Session Configuration
 app.use(session({
@@ -39,9 +40,11 @@ app.use(session({
 
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
+const postsRoutes = require('./routes/postsRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api', profileRoutes);
+app.use('/api', postsRoutes);
 
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));

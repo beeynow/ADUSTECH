@@ -52,6 +52,26 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="upload"
+        options={{
+          title: '',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{
+              width: 56,
+              height: 36,
+              backgroundColor: colorScheme === 'dark' ? '#42A5F5' : '#1976D2',
+              borderRadius: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: [{ translateY: -6 }],
+            }}>
+              <Ionicons name="add" size={22} color="#FFFFFF" />
+            </View>
+          ),
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
         name="leadersboard"
         options={{
           title: 'Leadersboard',
