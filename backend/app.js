@@ -30,8 +30,10 @@ app.use(session({
 }));
 
 const authRoutes = require('./routes/authRoutes');
+const profileRoutes = require('./routes/profileRoutes');
 
 app.use('/api/auth', authRoutes);
+app.use('/api', profileRoutes);
 
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
