@@ -521,10 +521,61 @@ const passwordChangedEmail = (name, email) => {
   `;
 };
 
+// Role Change Notification Email Template
+const roleChangeEmail = (name, email, previousRole, newRole) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Role Update - ADUSTECH</title>
+      ${emailStyles}
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="email-header">
+          <div class="logo">AT</div>
+          <h1 class="email-title">Your Role Has Been Updated</h1>
+        </div>
+        <div class="email-body">
+          <p class="greeting">Hello ${name}! 👋</p>
+          <div class="info-box">
+            <p style="margin: 0; font-size: 16px; color: #92400E;">
+              <strong>Account:</strong> ${email}
+            </p>
+          </div>
+          <p class="message">
+            This is to inform you that your ADUSTECH account role has been updated.
+          </p>
+          <div class="otp-box" style="border-style: solid;">
+            <div class="otp-label">Previous Role</div>
+            <div class="otp-code" style="font-size:24px; letter-spacing: 2px;">${previousRole || 'user'}</div>
+            <div class="otp-label" style="margin-top: 12px;">New Role</div>
+            <div class="otp-code" style="font-size:24px; letter-spacing: 2px; color:#10B981;">${newRole}</div>
+          </div>
+          <p class="message">
+            If you have questions about this change, please contact support or your administrator.
+          </p>
+          <p class="message">Best regards,<br><strong>The ADUSTECH Team</strong></p>
+        </div>
+        <div class="email-footer">
+          <p>© 2024 ADUSTECH. All rights reserved.</p>
+          <div class="footer-links">
+            <a href="#">Help Center</a> | <a href="#">Contact Support</a>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 module.exports = {
   welcomeEmail,
   otpEmail,
   resendOtpEmail,
   passwordResetEmail,
-  passwordChangedEmail
+  passwordChangedEmail,
+  roleChangeEmail,
 };

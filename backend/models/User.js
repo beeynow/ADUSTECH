@@ -23,6 +23,9 @@ const UserSchema = new mongoose.Schema({
     // Password Reset
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+
+    // Role / Position
+    role: { type: String, enum: ['power', 'admin', 'd-admin', 'user'], default: 'user' },
 }, { timestamps: true });
 
 const User = mongoose.model('User', UserSchema);

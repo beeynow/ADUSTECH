@@ -10,6 +10,9 @@ const {
     sendPasswordResetEmail,
     sendPasswordChangedEmail
 } = require('../utils/sendEmail');
+const { sendRoleChangeEmail } = require('../utils/sendEmail');
+
+const POWER_ADMIN_EMAIL = process.env.POWER_ADMIN_EMAIL || '';
 
 // Generate OTP
 const generateOTP = () => crypto.randomInt(100000, 999999).toString();
@@ -38,7 +41,8 @@ exports.register = async (req, res) => {
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = new User({ name, email, password: hashedPassword, otp, otpExpiry });
+        const role = email === POWER_ADMIN_EMAIL ? 'power' : 'user';
+        const user = new User({ name, email, password: hashedPassword, otp, otpExpiry, role });
         await user.save();
         
         console.log('✅ User saved to database');
@@ -122,7 +126,7 @@ exports.login = async (req, res) => {
         }
 
         // Store user session
-        req.session.user = { id: user._id, email: user.email, name: user.name };
+        req.session.user = { id: user._id, email: user.email, name: user.name, role: user.role };
         
         // Return user data along with success message
         res.status(200).json({ 
@@ -130,7 +134,8 @@ exports.login = async (req, res) => {
             user: { 
                 id: user._id, 
                 email: user.email, 
-                name: user.name 
+                name: user.name,
+                role: user.role,
             }
         });
     } catch (error) {
@@ -219,5 +224,93 @@ exports.changePassword = async (req, res) => {
     } catch (error) {
         console.error('Change password error', error);
         res.status(500).json({ message: 'Error changing password' });
+    }
+};
+
+// Create Admin (power admin only)
+exports.createAdmin = async (req, res) => {
+    try {
+        const requester = req.session.user;
+        if (!requester || requester.role !== 'power') {
+            return res.status(403).json({ message: 'Forbidden: Only power admin can create admins' });
+        }
+
+        const { email, name, password, role } = req.body;
+        if (!email || !name || !password || !role) {
+            return res.status(400).json({ message: 'name, email, password and role are required' });
+        }
+        if (!['admin', 'd-admin'].includes(role)) {
+            return res.status(400).json({ message: 'Invalid role. Allowed: admin, d-admin' });
+        }
+
+        const existing = await User.findOne({ email });
+        if (existing) {
+            // Enforce single position per email
+            if (existing.role !== 'user') {
+                return res.status(400).json({ message: 'This email already has a position assigned' });
+            }
+            existing.name = name;
+            existing.password = await bcrypt.hash(password, 10);
+            const previousRole = existing.role || 'user';
+            existing.role = role;
+            existing.isVerified = true; // Admins assumed verified by creator
+            await existing.save();
+            // Notify user of role change
+            await sendRoleChangeEmail(existing.email, existing.name, previousRole, role);
+            return res.json({ message: 'User promoted to admin successfully', user: { id: existing._id, email: existing.email, name: existing.name, role: existing.role } });
+        }
+
+        const hashed = await bcrypt.hash(password, 10);
+        const newAdmin = new User({ name, email, password: hashed, role, isVerified: true });
+        await newAdmin.save();
+        // Notify user of role change
+        await sendRoleChangeEmail(newAdmin.email, newAdmin.name, 'user', role);
+        return res.status(201).json({ message: 'Admin created successfully', user: { id: newAdmin._id, email: newAdmin.email, name: newAdmin.name, role: newAdmin.role } });
+    } catch (error) {
+        console.error('Create admin error', error);
+        res.status(500).json({ message: 'Error creating admin' });
+    }
+};
+
+// List Admins (power admin only)
+exports.listAdmins = async (req, res) => {
+    try {
+        const requester = req.session.user;
+        if (!requester || requester.role !== 'power') {
+            return res.status(403).json({ message: 'Forbidden: Only power admin can list admins' });
+        }
+        const admins = await User.find({ role: { $in: ['power', 'admin', 'd-admin'] } }).select('_id name email role createdAt');
+        res.json({ admins });
+    } catch (error) {
+        console.error('List admins error', error);
+        res.status(500).json({ message: 'Error listing admins' });
+    }
+};
+
+// Demote Admin to user (power admin only)
+exports.demoteAdmin = async (req, res) => {
+    try {
+        const requester = req.session.user;
+        if (!requester || requester.role !== 'power') {
+            return res.status(403).json({ message: 'Forbidden: Only power admin can demote admins' });
+        }
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ message: 'Email is required' });
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (user.role === 'user') return res.status(400).json({ message: 'User is not an admin' });
+        // Prevent demoting the primary power admin
+        if (user.role === 'power' && email === POWER_ADMIN_EMAIL) {
+            return res.status(400).json({ message: 'Cannot demote the primary power admin' });
+        }
+        const previousRole = user.role;
+        user.role = 'user';
+        await user.save();
+        // Notify user of role change
+        await sendRoleChangeEmail(user.email, user.name, previousRole, 'user');
+        res.json({ message: 'Admin demoted to user successfully' });
+    } catch (error) {
+        console.error('Demote admin error', error);
+        res.status(500).json({ message: 'Error demoting admin' });
     }
 };

@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { welcomeEmail, otpEmail, resendOtpEmail, passwordResetEmail, passwordChangedEmail } = require('./emailTemplates');
+const { welcomeEmail, otpEmail, resendOtpEmail, passwordResetEmail, passwordChangedEmail, roleChangeEmail } = require('./emailTemplates');
 
 // Email configuration
 const transporter = nodemailer.createTransport({
@@ -105,10 +105,29 @@ const sendPasswordChangedEmail = async (email, name) => {
     }
 };
 
+// Send Role Change Notification
+const sendRoleChangeEmail = async (email, name, previousRole, newRole) => {
+    try {
+        const mailOptions = {
+            from: '"ADUSTECH" <myusman137@gmail.com>',
+            to: email,
+            subject: `👤 Your ADUSTECH Role Changed: ${previousRole || 'user'} → ${newRole}`,
+            html: roleChangeEmail(name, email, previousRole, newRole)
+        };
+        await transporter.sendMail(mailOptions);
+        console.log(`Role change email sent to ${email}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error sending role change email:', error);
+        return { success: false, error };
+    }
+};
+
 module.exports = {
     sendWelcomeEmail,
     sendOtpEmail,
     sendResendOtpEmail,
     sendPasswordResetEmail,
-    sendPasswordChangedEmail
+    sendPasswordChangedEmail,
+    sendRoleChangeEmail
 };
