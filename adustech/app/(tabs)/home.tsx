@@ -1,283 +1,170 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  useColorScheme,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
-import { useAuth } from '../../context/AuthContext';
-import { profileAPI, UserProfile } from '../../services/profileApi';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, FlatList, Image } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+interface Post {
+  id: string;
+  author: string;
+  avatar?: string;
+  category: string;
+  title: string;
+  content: string;
+  image?: string;
+  likes: number;
+  reposts: number;
+  comments: number;
+  liked?: boolean;
+}
+
+const CATEGORIES = ['All','Level','Department','Exam','Timetable','Event'];
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const { user } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const isDark = useColorScheme() === 'dark';
+  const [search, setSearch] = useState('');
+  const [activeCat, setActiveCat] = useState('All');
+  const [posts, setPosts] = useState<Post[]>([{
+    id: '1', author: 'Ada Lovelace', category: 'Department', title: 'New Lab Resources', content: 'CS department just added new lab machines. Book your slot!', likes: 12, reposts: 3, comments: 5,
+  }, {
+    id: '2', author: 'Exam Office', category: 'Exam', title: 'Mid-Sem Schedule', content: 'Mid-semester exam timetable will be out on Friday 10 AM.', likes: 45, reposts: 12, comments: 30,
+  }, {
+    id: '3', author: 'Student Union', category: 'Event', title: 'Tech Fest 2026', content: 'Join us for hackathons, talks, and merch giveaways this weekend!', likes: 64, reposts: 18, comments: 41,
+  }, {
+    id: '4', author: 'Level Coordinator', category: 'Level', title: '400L Project Briefing', content: 'Mandatory briefing for 400L students on capstone projects.', likes: 23, reposts: 7, comments: 10,
+  }] );
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
-    setLoading(true);
-    const result = await profileAPI.getProfile();
-    if (result.success && result.data.user) {
-      setProfile(result.data.user);
+  const filtered = useMemo(() => {
+    let list = posts;
+    if (activeCat !== 'All') list = list.filter(p => p.category === activeCat);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(p => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q) || p.author.toLowerCase().includes(q));
     }
-    setLoading(false);
-  };
+    return list;
+  }, [posts, activeCat, search]);
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return '🌅 Good Morning';
-    if (hour < 18) return '☀️ Good Afternoon';
-    return '🌙 Good Evening';
+  const toggleLike = (id: string) => {
+    setPosts(prev => prev.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p));
   };
+  const incRepost = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: p.reposts + 1 } : p));
+  const incComment = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: p.comments + 1 } : p));
 
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.center, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-        <ActivityIndicator size="large" color={isDark ? '#42A5F5' : '#1976D2'} />
+  const headerBg = isDark ? '#0A1929' : '#FFFFFF';
+  const bg = isDark ? '#0A1929' : '#E6F4FE';
+  const card = isDark ? '#0F213A' : '#FFFFFF';
+  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
+  const muted = isDark ? '#90CAF9' : '#607D8B';
+  const border = isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)';
+
+  const renderItem = ({ item }: { item: Post }) => (
+    <View style={[styles.post, { backgroundColor: card, borderColor: border }]}>
+      <View style={styles.postHeader}>
+        <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>{item.author.charAt(0)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.postTitle, { color: textPrimary }]} numberOfLines={1}>{item.title}</Text>
+          <Text style={{ color: muted, fontSize: 12 }}>{item.author} • {item.category}</Text>
+        </View>
       </View>
-    );
-  }
+      <Text style={{ color: muted, marginTop: 6 }}>{item.content}</Text>
+      {item.image && (
+        <Image source={{ uri: item.image }} style={styles.postImage} />
+      )}
+      <View style={styles.postActions}>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(item.id)}>
+          <Ionicons name={item.liked ? 'heart' : 'heart-outline'} size={18} color={item.liked ? '#E53935' : muted} />
+          <Text style={[styles.count, { color: muted }]}>{item.likes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => incRepost(item.id)}>
+          <Ionicons name="repeat" size={18} color={muted} />
+          <Text style={[styles.count, { color: muted }]}>{item.reposts}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => incComment(item.id)}>
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={muted} />
+          <Text style={[styles.count, { color: muted }]}>{item.comments}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-      <View style={styles.content}>
-        {/* Welcome Card */}
-        <View style={[styles.card, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={[styles.greeting, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-            {getGreeting()}
-          </Text>
-          <Text style={[styles.userName, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-            {profile?.name || 'User'}! 👋
-          </Text>
-          {profile?.bio && (
-            <Text style={[styles.bio, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-              {profile.bio}
-            </Text>
-          )}
-        </View>
-
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-            <Text style={styles.statIcon}>🎓</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Level</Text>
-            <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              {profile?.level || 'N/A'}
-            </Text>
-          </View>
-
-          <View style={[styles.statCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-            <Text style={styles.statIcon}>📚</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Department</Text>
-            <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              {profile?.department || 'N/A'}
-            </Text>
-          </View>
-
-          <View style={[styles.statCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-            <Text style={styles.statIcon}>🏛️</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Faculty</Text>
-            <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              {profile?.faculty || 'N/A'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-          Quick Actions
-        </Text>
-        
-        <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={styles.actionIcon}>📝</Text>
-          <View style={styles.actionContent}>
-            <Text style={[styles.actionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              Assignments
-            </Text>
-            <Text style={[styles.actionSubtitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-              View and submit your assignments
-            </Text>
-          </View>
-          <Text style={[styles.actionArrow, { color: isDark ? '#42A5F5' : '#1976D2' }]}>›</Text>
+    <View style={[styles.container, { backgroundColor: bg }]}> 
+      {/* Header (non-scroll) */}
+      <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: border }]}> 
+        <Text style={[styles.logo, { color: textPrimary }]}>ADUSTECH</Text>
+        <TouchableOpacity accessibilityRole="button">
+          <Ionicons name="notifications-outline" size={22} color={isDark ? '#64B5F6' : '#1976D2'} />
         </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={styles.actionIcon}>📅</Text>
-          <View style={styles.actionContent}>
-            <Text style={[styles.actionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              Schedule
-            </Text>
-            <Text style={[styles.actionSubtitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-              Check your class timetable
-            </Text>
-          </View>
-          <Text style={[styles.actionArrow, { color: isDark ? '#42A5F5' : '#1976D2' }]}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={styles.actionIcon}>📊</Text>
-          <View style={styles.actionContent}>
-            <Text style={[styles.actionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-              Results
-            </Text>
-            <Text style={[styles.actionSubtitle, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-              View your academic results
-            </Text>
-          </View>
-          <Text style={[styles.actionArrow, { color: isDark ? '#42A5F5' : '#1976D2' }]}>›</Text>
-        </TouchableOpacity>
-
-        {/* Announcements */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-          Recent Announcements
-        </Text>
-        
-        <View style={[styles.announcementCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
-          <Text style={[styles.announcementTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-            📢 Welcome to your Home
-          </Text>
-          <Text style={[styles.announcementText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-            Complete your profile to get personalized recommendations and updates.
-          </Text>
-          <Text style={[styles.announcementDate, { color: isDark ? '#546E7A' : '#90A4AE' }]}>
-            Today
-          </Text>
-        </View>
       </View>
-    </ScrollView>
+
+      {/* Search + categories (sticky header for list) */}
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 12, paddingBottom: 32 }}
+        ListHeaderComponent={
+          <View>
+            <View style={[styles.searchWrap, { backgroundColor: headerBg, borderColor: border }]}> 
+              <Ionicons name="search" color={muted} size={16} />
+              <TextInput
+                style={[styles.searchInput, { color: textPrimary }]} 
+                placeholder="Search posts, people, updates..." 
+                placeholderTextColor={muted}
+                value={search}
+                onChangeText={setSearch}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={16} color={muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.chipsRow}>
+              {CATEGORIES.map(cat => (
+                <TouchableOpacity key={cat} onPress={() => setActiveCat(cat)} style={[styles.chip, activeCat === cat && styles.chipActive, { borderColor: border }]}>
+                  <Text style={[styles.chipText, { color: activeCat === cat ? (isDark ? '#FFFFFF' : '#1976D2') : muted }]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  center: {
-    justifyContent: 'center',
+  container: { flex: 1 },
+  header: {
+    height: 56,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
     alignItems: 'center',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  card: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  greeting: {
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  bio: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  statsContainer: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  actionCard: {
     flexDirection: 'row',
+  },
+  logo: { fontWeight: '800', fontSize: 18, letterSpacing: 0.5 },
+  searchWrap: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    flexDirection: 'row',
+    gap: 8,
   },
-  actionIcon: {
-    fontSize: 32,
-    marginRight: 16,
-  },
-  actionContent: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  actionSubtitle: {
-    fontSize: 14,
-  },
-  actionArrow: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  announcementCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  announcementTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  announcementText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  announcementDate: {
-    fontSize: 12,
-  },
+  searchInput: { flex: 1, fontSize: 14 },
+  chipsRow: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 8, flexWrap: 'wrap' },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 100, borderWidth: 1, backgroundColor: 'transparent' },
+  chipActive: { backgroundColor: 'rgba(25,118,210,0.12)' },
+
+  post: { borderRadius: 16, padding: 12, borderWidth: 1, marginBottom: 12 },
+  postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  postTitle: { fontWeight: '800', fontSize: 15 },
+  postImage: { marginTop: 8, height: 160, borderRadius: 12 },
+  postActions: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
+  count: { fontSize: 12 },
 });
