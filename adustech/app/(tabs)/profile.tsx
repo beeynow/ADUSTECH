@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,17 +15,20 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { profileAPI, UserProfile } from '../../services/profileApi';
 import { useAuth } from '../../context/AuthContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const { logout } = useAuth();
+  const isDark = useColorScheme() === 'dark';
   const router = useRouter();
+  const { user, logout } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [autoSave, setAutoSave] = useState(true);
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -35,62 +38,90 @@ export default function ProfileScreen() {
   const [faculty, setFaculty] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | ''>('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [address, setAddress] = useState('');
   const [country, setCountry] = useState('');
   const [profileImage, setProfileImage] = useState('');
 
+  // Validation state
+  const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
+
+  const levels = useMemo(() => ['100','200','300','400','500'], []);
+  const genders = useMemo(() => ['Male','Female','Other'] as const, []);
+
   useEffect(() => {
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProfile = async () => {
     setLoading(true);
     const result = await profileAPI.getProfile();
     if (result.success && result.data.user) {
-      const userData = result.data.user;
-      setProfile(userData);
-      setName(userData.name || '');
-      setBio(userData.bio || '');
-      setLevel(userData.level || '');
-      setDepartment(userData.department || '');
-      setFaculty(userData.faculty || '');
-      setPhone(userData.phone || '');
-      setGender(userData.gender || '');
-      setAddress(userData.address || '');
-      setCountry(userData.country || '');
-      setProfileImage(userData.profileImage || '');
+      const u = result.data.user as UserProfile & { dateOfBirth?: string };
+      setProfile(u);
+      setName(u.name || '');
+      setBio(u.bio || '');
+      setLevel(u.level || '');
+      setDepartment(u.department || '');
+      setFaculty(u.faculty || '');
+      setPhone(u.phone || '');
+      setGender((u.gender as any) || '');
+      setDateOfBirth(u?.dateOfBirth ? new Date(u.dateOfBirth as any).toISOString().slice(0,10) : '');
+      setAddress(u.address || '');
+      setCountry(u.country || '');
+      setProfileImage(u.profileImage || '');
     }
     setLoading(false);
   };
 
+  const validate = () => {
+    const next: { [k: string]: string | undefined } = {};
+    if (!name.trim()) next.name = 'Full name is required';
+    if (phone && !/^\+?[0-9\-\s]{7,15}$/.test(phone)) next.phone = 'Enter a valid phone number';
+    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) next.dateOfBirth = 'Use format YYYY-MM-DD';
+    if (level && !levels.includes(level)) next.level = 'Level should be one of ' + levels.join(', ');
+    if (gender && !genders.includes(gender)) next.gender = 'Gender must be Male, Female or Other';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const scheduleAutoSave = () => {
+    if (!autoSave || !editing) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      if (!validate()) return;
+      await handleSave(true);
+    }, 1200);
+  };
+
+  useEffect(() => {
+    scheduleAutoSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, bio, level, department, faculty, phone, gender, dateOfBirth, address, country, profileImage, autoSave, editing]);
+
   const pickImage = async () => {
+    if (!editing) return;
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
     if (!permissionResult.granted) {
       Alert.alert('Permission Required', 'Please allow access to your photos');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5,
+      quality: 0.6,
       base64: true,
     });
-
     if (!result.canceled && result.assets[0].base64) {
       const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
       setProfileImage(base64Image);
     }
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Error', 'Name is required');
-      return;
-    }
-
+  const handleSave = async (silent = false) => {
+    if (!validate()) return { success: false };
     setSaving(true);
     const result = await profileAPI.updateProfile({
       name,
@@ -100,6 +131,7 @@ export default function ProfileScreen() {
       faculty,
       phone,
       gender,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
       address,
       country,
       profileImage,
@@ -107,446 +139,384 @@ export default function ProfileScreen() {
     setSaving(false);
 
     if (result.success) {
-      Alert.alert('Success', 'Profile updated successfully');
-      setEditing(false);
+      if (!silent) Alert.alert('Saved', 'Your profile has been updated');
+      if (!silent) setEditing(false);
       loadProfile();
+      return { success: true };
     } else {
-      Alert.alert('Error', result.message || 'Failed to update profile');
+      if (!silent) Alert.alert('Error', result.message || 'Failed to update profile');
+      return { success: false };
     }
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
+      <View style={[styles.center, styles.flex, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
         <ActivityIndicator size="large" color={isDark ? '#42A5F5' : '#1976D2'} />
       </View>
     );
   }
 
+  const headerGradient = isDark ? ['#0A1929', '#102B4C'] : ['#1976D2', '#42A5F5'];
+  const cardBg = isDark ? '#0F213A' : '#FFFFFF';
+  const muted = isDark ? '#90CAF9' : '#607D8B';
+  const textPrimary = isDark ? '#FFFFFF' : '#0A1929';
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }]}>
-      <View style={styles.content}>
-        {/* Profile Image */}
-        <View style={styles.imageContainer}>
-          <TouchableOpacity onPress={editing ? pickImage : undefined}>
+    <ScrollView style={{ flex: 1, backgroundColor: isDark ? '#0A1929' : '#E6F4FE' }}>
+      {/* Header */}
+      <LinearGradient colors={headerGradient} style={styles.headerWrap}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              <Image source={{ uri: profileImage }} style={styles.avatar} />
             ) : (
-              <View style={[styles.profileImagePlaceholder, isDark ? styles.placeholderDark : styles.placeholderLight]}>
-                <Text style={styles.placeholderText}>
-                  {name.charAt(0).toUpperCase() || '?'}
-                </Text>
+              <View style={[styles.avatar, styles.avatarPlaceholder]}> 
+                <Text style={styles.avatarInitial}>{(name || profile?.name || '?').charAt(0).toUpperCase()}</Text>
               </View>
             )}
             {editing && (
-              <View style={[styles.editBadge, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
-                <Text style={styles.editBadgeText}>📷</Text>
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={16} color="#FFFFFF" />
               </View>
             )}
           </TouchableOpacity>
-        </View>
 
-        {/* Email (Non-editable) */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Email</Text>
-          <View style={[styles.input, styles.disabledInput, { backgroundColor: isDark ? '#1A2332' : '#F5F5F5' }]}>
-            <Text style={[styles.disabledText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
+          <View style={styles.headerText}>
+            <Text style={[styles.displayName, { color: '#FFFFFF' }]} numberOfLines={1}>
+              {name || profile?.name || 'User'}
+            </Text>
+            <Text style={[styles.emailText, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
               {profile?.email}
             </Text>
+            <View style={styles.badgesRow}>
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.35)' }]}>
+                <Ionicons name="ribbon-outline" size={14} color="#FFFFFF" />
+                <Text style={styles.badgeText}>{user?.role || 'user'}</Text>
+              </View>
+              {level ? (
+                <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.35)' }]}>
+                  <Ionicons name="school-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.badgeText}>Level {level}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => setEditing((e) => !e)}
+            style={[styles.editToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.2)' }]}
+          >
+            <Ionicons name={editing ? 'close' : 'create-outline'} size={18} color="#FFFFFF" />
+            <Text style={styles.editToggleText}>{editing ? 'Cancel' : 'Edit'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Auto-save toggle */}
+        {editing && (
+          <View style={styles.autoRow}>
+            <Text style={{ color: 'rgba(255,255,255,0.9)' }}>Auto-save</Text>
+            <TouchableOpacity
+              onPress={() => setAutoSave((v) => !v)}
+              style={[styles.toggle, { borderColor: 'rgba(255,255,255,0.6)' }, autoSave && styles.toggleOn]}
+            >
+              <View style={[styles.knob, autoSave && styles.knobOn]} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </LinearGradient>
+
+      {/* Quick stats */}
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
+          <Ionicons name="school-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
+          <Text style={[styles.statLabel, { color: muted }]}>Department</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{department || '—'}</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
+          <Ionicons name="business-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
+          <Text style={[styles.statLabel, { color: muted }]}>Faculty</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{faculty || '—'}</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: cardBg }]}>
+          <Ionicons name="bar-chart-outline" size={18} color={isDark ? '#90CAF9' : '#1976D2'} />
+          <Text style={[styles.statLabel, { color: muted }]}>Level</Text>
+          <Text style={[styles.statValue, { color: textPrimary }]} numberOfLines={1}>{level || '—'}</Text>
+        </View>
+      </View>
+
+      {/* About */}
+      <View style={[styles.card, { backgroundColor: cardBg }]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { color: textPrimary }]}>About</Text>
+        </View>
+        <View style={styles.fieldRow}>
+          <Ionicons name="document-text-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Tell us about yourself"
+              placeholderTextColor={muted}
+              value={bio}
+              onChangeText={setBio}
+              editable={editing}
+              multiline
+            />
           </View>
         </View>
+      </View>
 
-        {/* Name */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Name *</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={name}
-            onChangeText={setName}
-            editable={editing}
-            placeholder="Enter your name"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+      {/* Academic Info */}
+      <View style={[styles.card, { backgroundColor: cardBg }]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { color: textPrimary }]}>Academic Info</Text>
         </View>
-
-        {/* Bio */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Bio</Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.textArea,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={bio}
-            onChangeText={setBio}
-            editable={editing}
-            placeholder="Tell us about yourself"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-            multiline
-            numberOfLines={4}
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="school-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            {editing ? (
+              <View style={styles.chipsRow}>
+                {levels.map((lv) => (
+                  <TouchableOpacity key={lv} onPress={() => setLevel(lv)} style={[styles.chip, level === lv && styles.chipActive]}>
+                    <Text style={[styles.chipText, level === lv && styles.chipTextActive]}>{lv}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.inputStatic, { color: level ? textPrimary : muted }]}>{level || 'Level (e.g., 100, 200)'}</Text>
+            )}
+            {!!errors.level && <Text style={styles.errorText}>{errors.level}</Text>}
+          </View>
         </View>
-
-        {/* Level */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Level</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={level}
-            onChangeText={setLevel}
-            editable={editing}
-            placeholder="e.g., 100, 200, 300"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="albums-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Department"
+              placeholderTextColor={muted}
+              value={department}
+              onChangeText={setDepartment}
+              editable={editing}
+            />
+          </View>
         </View>
-
-        {/* Department */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Department</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={department}
-            onChangeText={setDepartment}
-            editable={editing}
-            placeholder="e.g., Computer Science"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="business-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Faculty"
+              placeholderTextColor={muted}
+              value={faculty}
+              onChangeText={setFaculty}
+              editable={editing}
+            />
+          </View>
         </View>
+      </View>
 
-        {/* Faculty */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Faculty</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={faculty}
-            onChangeText={setFaculty}
-            editable={editing}
-            placeholder="e.g., Science"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+      {/* Contact */}
+      <View style={[styles.card, { backgroundColor: cardBg }]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { color: textPrimary }]}>Contact</Text>
         </View>
-
-        {/* Phone */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Phone</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={phone}
-            onChangeText={setPhone}
-            editable={editing}
-            placeholder="+1234567890"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-            keyboardType="phone-pad"
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="call-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Phone"
+              placeholderTextColor={muted}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              editable={editing}
+            />
+            {!!errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+          </View>
         </View>
-
-        {/* Gender */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Gender</Text>
-          {editing ? (
-            <View style={styles.genderContainer}>
-              {['Male', 'Female', 'Other'].map((g) => (
-                <TouchableOpacity
-                  key={g}
-                  style={[
-                    styles.genderButton,
-                    { borderColor: isDark ? '#42A5F5' : '#1976D2' },
-                    gender === g && { backgroundColor: isDark ? '#42A5F5' : '#1976D2' },
-                  ]}
-                  onPress={() => setGender(g as any)}
-                >
-                  <Text
-                    style={[
-                      styles.genderButtonText,
-                      { color: gender === g ? '#FFFFFF' : isDark ? '#42A5F5' : '#1976D2' },
-                    ]}
-                  >
-                    {g}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={[styles.input, styles.disabledInput, { backgroundColor: isDark ? '#1A2332' : '#F5F5F5' }]}>
-              <Text style={[styles.disabledText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
-                {gender || 'Not specified'}
-              </Text>
-            </View>
-          )}
+        <View style={styles.fieldRow}>
+          <Ionicons name="mail-outline" size={18} color={muted} />
+          <Text style={[styles.inputStatic, { color: muted }]} numberOfLines={1}>{profile?.email}</Text>
         </View>
-
-        {/* Address */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Address</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={address}
-            onChangeText={setAddress}
-            editable={editing}
-            placeholder="Your address"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="location-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Address"
+              placeholderTextColor={muted}
+              value={address}
+              onChangeText={setAddress}
+              editable={editing}
+            />
+          </View>
         </View>
-
-        {/* Country */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: isDark ? '#90CAF9' : '#546E7A' }]}>Country</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#0A1929' },
-              !editing && styles.disabledInput,
-            ]}
-            value={country}
-            onChangeText={setCountry}
-            editable={editing}
-            placeholder="Your country"
-            placeholderTextColor={isDark ? '#90CAF9' : '#546E7A'}
-          />
+        <View style={styles.fieldRow}>
+          <Ionicons name="flag-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Country"
+              placeholderTextColor={muted}
+              value={country}
+              onChangeText={setCountry}
+              editable={editing}
+            />
+          </View>
         </View>
+      </View>
 
-        {/* Action Buttons */}
+      {/* Personal */}
+      <View style={[styles.card, { backgroundColor: cardBg }]}>
+        <View style={styles.cardHeader}>
+          <Text style={[styles.cardTitle, { color: textPrimary }]}>Personal</Text>
+        </View>
+        <View style={styles.fieldRow}>
+          <Ionicons name="transgender-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            {editing ? (
+              <View style={styles.chipsRow}>
+                {genders.map((g) => (
+                  <TouchableOpacity key={g} onPress={() => setGender(g)} style={[styles.chip, gender === g && styles.chipActive]}>
+                    <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.inputStatic, { color: gender ? textPrimary : muted }]}>{gender || 'Gender'}</Text>
+            )}
+            {!!errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
+          </View>
+        </View>
+        <View style={styles.fieldRow}>
+          <Ionicons name="calendar-outline" size={18} color={muted} />
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { color: textPrimary }]}
+              placeholder="Date of Birth (YYYY-MM-DD)"
+              placeholderTextColor={muted}
+              value={dateOfBirth}
+              onChangeText={setDateOfBirth}
+              editable={editing}
+            />
+            {!!errors.dateOfBirth && <Text style={styles.errorText}>{errors.dateOfBirth}</Text>}
+          </View>
+        </View>
+      </View>
+
+      {/* Actions */}
+      <View style={styles.actionsWrap}>
         {editing ? (
-          <View style={styles.buttonContainer}>
+          <View style={styles.inlineRow}>
             <TouchableOpacity
-              style={[styles.button, styles.cancelButton, { borderColor: isDark ? '#EF4444' : '#DC2626' }]}
+              style={[styles.button, styles.btnOutline, { borderColor: isDark ? '#EF4444' : '#DC2626' }]}
               onPress={() => {
                 setEditing(false);
                 loadProfile();
               }}
               disabled={saving}
             >
-              <Text style={[styles.cancelButtonText, { color: isDark ? '#EF4444' : '#DC2626' }]}>
-                Cancel
-              </Text>
+              <Text style={[styles.btnOutlineText, { color: isDark ? '#EF4444' : '#DC2626' }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.button, styles.saveButton, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}
-              onPress={handleSave}
+              style={[styles.button, styles.btnPrimary]}
+              onPress={() => handleSave(false)}
               disabled={saving}
             >
-              {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.saveButtonText}>Save</Text>
-              )}
+              {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Save Changes</Text>}
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <TouchableOpacity
-              style={[styles.button, styles.editButton, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}
-              onPress={() => setEditing(true)}
-            >
-              <Text style={styles.editButtonText}>Edit Profile</Text>
+            {user?.role === 'power' && (
+              <>
+                <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/create-admin')}>
+                  <Ionicons name="person-add-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
+                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Create Admin</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/admin-management')}>
+                  <Ionicons name="settings-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
+                  <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Admin Management</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity style={[styles.button, styles.btnSecondary]} onPress={() => router.push('/change-password')}>
+              <Ionicons name="key-outline" size={18} color={isDark ? '#FFFFFF' : '#1976D2'} />
+              <Text style={[styles.btnSecondaryText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Change Password</Text>
             </TouchableOpacity>
-            
-            {/* Change Password */}
             <TouchableOpacity
-              style={[styles.button, styles.editButton, { backgroundColor: isDark ? '#1E3A5F' : '#E3F2FD' }]}
-              onPress={() => router.push('/change-password')}
-            >
-              <Text style={[styles.editButtonText, { color: isDark ? '#FFFFFF' : '#1976D2' }]}>Change Password</Text>
-            </TouchableOpacity>
-
-            {/* Logout Button */}
-            <TouchableOpacity
-              style={[styles.button, styles.logoutButton, { backgroundColor: isDark ? '#DC2626' : '#EF4444' }]}
+              style={[styles.button, styles.btnDanger]}
               onPress={() => {
-                Alert.alert(
-                  'Logout',
-                  'Are you sure you want to logout?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Logout',
-                      style: 'destructive',
-                      onPress: async () => {
-                        await logout();
-                        router.replace('/login');
-                      },
-                    },
-                  ]
-                );
+                Alert.alert('Logout', 'Are you sure you want to logout?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/login'); } }
+                ]);
               }}
             >
-              <Text style={styles.logoutButtonText}>Logout</Text>
+              <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.btnDangerText}>Logout</Text>
             </TouchableOpacity>
           </>
         )}
       </View>
+
+      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  center: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    padding: 24,
-    paddingBottom: 100,
-  },
-  imageContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderLight: {
-    backgroundColor: '#1976D2',
-  },
-  placeholderDark: {
-    backgroundColor: '#42A5F5',
-  },
-  placeholderText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  editBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  editBadgeText: {
-    fontSize: 18,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-  },
-  disabledInput: {
-    opacity: 0.7,
-  },
-  disabledText: {
-    fontSize: 16,
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  genderButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  genderButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 24,
-  },
-  button: {
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editButton: {
-    width: '100%',
-    marginTop: 24,
-  },
-  editButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    flex: 1,
-    marginRight: 8,
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  cancelButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  saveButton: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  logoutButton: {
-    width: '100%',
-    marginTop: 16,
-  },
-  logoutButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  flex: { flex: 1 },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  headerWrap: { paddingTop: 36, paddingBottom: 16 },
+  headerContent: { paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#FFFFFF' },
+  avatarPlaceholder: { backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { color: '#FFFFFF', fontSize: 32, fontWeight: '800' },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: '#1976D2', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
+  headerText: { marginLeft: 12, flex: 1 },
+  displayName: { fontSize: 22, fontWeight: '800' },
+  emailText: { marginTop: 2, fontSize: 12 },
+  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  badgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  editToggle: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  editToggleText: { color: '#FFFFFF', fontWeight: '700' },
+  autoRow: { marginTop: 12, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  toggle: { width: 50, height: 28, borderRadius: 14, borderWidth: 2, padding: 2, justifyContent: 'center' },
+  toggleOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF', transform: [{ translateX: 2 }] },
+  knobOn: { transform: [{ translateX: 22 }] },
+
+  statsRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: -12 },
+  statCard: { flex: 1, marginHorizontal: 4, borderRadius: 14, padding: 12, alignItems: 'flex-start', gap: 4, elevation: 3 },
+  statLabel: { fontSize: 12 },
+  statValue: { fontSize: 14, fontWeight: '700' },
+
+  card: { marginTop: 12, marginHorizontal: 12, borderRadius: 16, padding: 12, elevation: 2 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  cardTitle: { fontSize: 16, fontWeight: '800' },
+  fieldRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8 },
+  input: { flex: 1, minHeight: 20 },
+  inputStatic: { flex: 1, minHeight: 20 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(25,118,210,0.35)' },
+  chipActive: { backgroundColor: 'rgba(25,118,210,0.12)', borderColor: '#1976D2' },
+  chipText: { color: '#1976D2', fontWeight: '700', fontSize: 12 },
+  chipTextActive: { color: '#1976D2' },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: 4 },
+
+  actionsWrap: { paddingHorizontal: 12, marginTop: 16, gap: 8 },
+  inlineRow: { flexDirection: 'row', gap: 8 },
+  button: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  btnPrimary: { backgroundColor: '#1976D2', flex: 1 },
+  btnPrimaryText: { color: '#FFFFFF', fontWeight: '800' },
+  btnOutline: { borderWidth: 2, backgroundColor: 'transparent', flex: 1 },
+  btnOutlineText: { fontWeight: '800' },
+  btnSecondary: { backgroundColor: 'transparent', borderWidth: 2, borderColor: 'rgba(25,118,210,0.25)' },
+  btnSecondaryText: { fontWeight: '800' },
+  btnDanger: { backgroundColor: '#EF4444' },
+  btnDangerText: { color: '#FFFFFF', fontWeight: '800' },
 });

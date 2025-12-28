@@ -153,6 +153,36 @@ export const authAPI = {
     }
   },
 
+ // Create admin (power only)
+ createAdmin: async (payload: { name: string; email: string; password: string; role: 'admin' | 'd-admin' }) => {
+   try {
+     const response = await api.post('/create-admin', payload);
+     return { success: true, data: response.data };
+   } catch (error: any) {
+     return { success: false, message: error.response?.data?.message || 'Failed to create admin.' };
+   }
+ },
+
+  // List admins (power only)
+  listAdmins: async () => {
+    try {
+      const response = await api.get('/admins');
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || 'Failed to list admins.' };
+    }
+  },
+
+  // Demote admin (power only)
+  demoteAdmin: async (email: string) => {
+    try {
+      const response = await api.post('/demote-admin', { email });
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || 'Failed to demote admin.' };
+    }
+  },
+
   // Get dashboard (protected route)
   getDashboard: async () => {
     try {

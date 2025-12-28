@@ -142,7 +142,7 @@ export default function HomeScreen() {
         
         <View style={[styles.announcementCard, { backgroundColor: isDark ? '#1E3A5F' : '#FFFFFF' }]}>
           <Text style={[styles.announcementTitle, { color: isDark ? '#FFFFFF' : '#0A1929' }]}>
-            📢 Welcome to ADUSTECH!
+            📢 Welcome to your Home
           </Text>
           <Text style={[styles.announcementText, { color: isDark ? '#90CAF9' : '#546E7A' }]}>
             Complete your profile to get personalized recommendations and updates.

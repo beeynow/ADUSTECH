@@ -5,6 +5,7 @@ import { authAPI } from '../services/api';
 interface User {
   name: string;
   email: string;
+  role?: 'power' | 'admin' | 'd-admin' | 'user';
 }
 
 interface AuthContextType {
@@ -36,7 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsed = JSON.parse(userData);
+        setUser(parsed);
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -75,7 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (result.success) {
       // Extract user name from response or email
       const name = result.data.user?.name || email.split('@')[0];
-      const userData = { name, email };
+      const role = result.data.user?.role as User['role'] | undefined;
+      const userData: User = { name, email, role };
       setUser(userData);
       await AsyncStorage.setItem('user', JSON.stringify(userData));
       return { success: true, message: result.data.message };
