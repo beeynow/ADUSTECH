@@ -15,6 +15,9 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   verifyOTP: (email: string, otp: string) => Promise<{ success: boolean; message?: string }>;
   resendOTP: (email: string) => Promise<{ success: boolean; message?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
+  resetPassword: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -86,6 +89,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await AsyncStorage.removeItem('user');
   };
 
+  const forgotPassword = async (email: string) => {
+    const result = await authAPI.forgotPassword(email);
+    if (result.success) {
+      await AsyncStorage.setItem('resetEmail', email);
+      return { success: true, message: result.data.message };
+    }
+    return { success: false, message: result.message };
+  };
+
+  const resetPassword = async (email: string, token: string, newPassword: string) => {
+    const result = await authAPI.resetPassword(email, token, newPassword);
+    if (result.success) {
+      await AsyncStorage.removeItem('resetEmail');
+      return { success: true, message: result.data.message };
+    }
+    return { success: false, message: result.message };
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const result = await authAPI.changePassword(currentPassword, newPassword);
+    if (result.success) {
+      return { success: true, message: result.data.message };
+    }
+    return { success: false, message: result.message };
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -96,6 +125,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         verifyOTP,
         resendOTP,
+        forgotPassword,
+        resetPassword,
+        changePassword,
         logout,
       }}
     >

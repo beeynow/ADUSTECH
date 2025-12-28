@@ -114,6 +114,45 @@ export const authAPI = {
     }
   },
 
+  // Forgot password - request reset code
+  forgotPassword: async (email: string) => {
+    try {
+      const response = await api.post('/forgot-password', { email });
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to initiate password reset.'
+      };
+    }
+  },
+
+  // Reset password with code
+  resetPassword: async (email: string, token: string, newPassword: string) => {
+    try {
+      const response = await api.post('/reset-password', { email, token, newPassword });
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to reset password.'
+      };
+    }
+  },
+
+  // Change password (authenticated)
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await api.post('/change-password', { currentPassword, newPassword });
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to change password.'
+      };
+    }
+  },
+
   // Get dashboard (protected route)
   getDashboard: async () => {
     try {

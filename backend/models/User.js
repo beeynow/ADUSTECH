@@ -19,6 +19,10 @@ const UserSchema = new mongoose.Schema({
     gender: { type: String, enum: ['Male', 'Female', 'Other', ''], default: '' },
     address: { type: String, default: '' },
     country: { type: String, default: '' },
+    
+    // Password Reset
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
 }, { timestamps: true });
 
 const User = mongoose.model('User', UserSchema);
