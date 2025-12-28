@@ -4,7 +4,7 @@
 // Detect platform and set appropriate API URL
 export const getApiUrl = () => {
   // For development, change this to your backend URL
-  const BACKEND_URL = 'http://192.168.3.173:5000';
+  const BACKEND_URL = 'http://192.168.210.122:5000';
   
   // Uncomment the appropriate line based on your testing environment:
   
