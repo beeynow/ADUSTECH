@@ -73,6 +73,27 @@ export default function SplashScreen() {
     outputRange: ['0%', '100%'],
   });
 
+  // Shimmer over the logo
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    shimmerAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.inOut(Easing.linear),
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmerAnim]);
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-120, 120],
+  });
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <Animated.View
@@ -84,8 +105,25 @@ export default function SplashScreen() {
           },
         ]}
       >
-        <View style={[styles.logoCircle, isDark ? styles.logoDark : styles.logoLight]}>
-          <Text style={styles.logoText}>AT</Text>
+        <View style={styles.logoShadow}>
+          <View>
+            <Animated.Image
+              source={require('../assets/images/plash.png')}
+              style={[styles.logoImage, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
+              resizeMode="contain"
+            />
+            {/* Shimmer overlay */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.shimmer,
+                {
+                  transform: [{ translateX: shimmerTranslate }, { rotate: '15deg' }],
+                  opacity: fadeAnim,
+                },
+              ]}
+            />
+          </View>
         </View>
       </Animated.View>
       
@@ -135,32 +173,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoCircle: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+  logoShadow: {
+    width: 220,
+    height: 220,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  logoLight: {
-    backgroundColor: '#1976D2',
-  },
-  logoDark: {
-    backgroundColor: '#42A5F5',
-  },
-  logoText: {
-    fontSize: 80,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 4,
+  logoImage: {
+    width: 180,
+    height: 180,
   },
   textContainer: {
     alignItems: 'center',

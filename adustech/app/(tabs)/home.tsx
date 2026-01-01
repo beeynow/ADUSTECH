@@ -40,9 +40,9 @@ export default function HomeScreen() {
           category: p.category || 'All',
           title: p.text?.slice(0,40) || 'Post',
           content: p.text || '',
-          image: p.imageBase64 || undefined,
+          image: p.imageUrl || p.imageBase64 || undefined,
           likes: (p.likes || []).length,
-          reposts: 0,
+          reposts: (p.reposts || []).length || 0,
           comments: (p.comments || []).length,
           liked: false,
         }));
@@ -67,7 +67,13 @@ export default function HomeScreen() {
     setPosts(prev => prev.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p));
     try { await postsAPI.toggleLike(id); } catch {}
   };
-  const incRepost = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: p.reposts + 1 } : p));
+  const toggleRepost = async (id: string) => {
+  setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: (p as any).reposted ? p.reposts - 1 : p.reposts + 1, reposted: !(p as any).reposted } as any : p));
+  try {
+    const res = await postsAPI.toggleRepost(id);
+    setPosts(prev => prev.map(p => p.id === id ? { ...p, reposts: res.reposts, reposted: res.reposted } as any : p));
+  } catch {}
+};
   const incComment = (id: string) => setPosts(prev => prev.map(p => p.id === id ? { ...p, comments: p.comments + 1 } : p));
 
   const headerBg = isDark ? '#0A1929' : '#FFFFFF';
@@ -101,7 +107,7 @@ export default function HomeScreen() {
           <Ionicons name={item.liked ? 'heart' : 'heart-outline'} size={18} color={item.liked ? '#E53935' : muted} />
           <Text style={[styles.count, { color: muted }]}>{item.likes}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => incRepost(item.id)}>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => toggleRepost(item.id)}>
           <Ionicons name="repeat" size={18} color={muted} />
           <Text style={[styles.count, { color: muted }]}>{item.reposts}</Text>
         </TouchableOpacity>
@@ -166,26 +172,26 @@ export default function HomeScreen() {
           }, 800);
         }}
         onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          // Simulate infinite scroll by appending demo posts
-          setPage((p) => p + 1);
+        onEndReached={async () => {
+          // Load next page from backend
+          const nextPage = page + 1;
+          setPage(nextPage);
           try {
-            const data = await postsAPI.list({ page: page + 1, limit: 10, category: activeCat !== 'All' ? activeCat : undefined, q: search || undefined });
+            const data = await postsAPI.list({ page: nextPage, limit: 10, category: activeCat !== 'All' ? activeCat : undefined, q: search || undefined });
             const mapped = (data.posts || []).map((p: any) => ({
               id: p._id,
               author: p.userName,
               category: p.category || 'All',
               title: p.text?.slice(0,40) || 'Post',
               content: p.text || '',
-              image: p.imageBase64 || undefined,
+              image: p.imageUrl || p.imageBase64 || undefined,
               likes: (p.likes || []).length,
-              reposts: 0,
+              reposts: (p.reposts || []).length || 0,
               comments: (p.comments || []).length,
               liked: false,
             }));
             setPosts(prev => [...prev, ...mapped]);
           } catch (e) {}
-          
         }}
         stickyHeaderIndices={[0]}
         ListHeaderComponent={
@@ -223,8 +229,8 @@ export default function HomeScreen() {
 
       {/* Comment Bottom Sheet */}
       {commentsVisible && (
-        <View style={styles.sheetWrap}>
-          <View style={styles.sheetHeader}>
+        <View style={[styles.sheetWrap, { backgroundColor: card }]>
+          <View style={[styles.sheetHeader, { backgroundColor: card, borderBottomColor: isDark ? 'rgba(66,165,245,0.25)' : 'rgba(25,118,210,0.15)' }]}>
             <Text style={[styles.sheetTitle, { color: textPrimary }]}>Comments</Text>
             <TouchableOpacity onPress={() => setCommentsVisible(false)}>
               <Ionicons name="close" size={22} color={isDark ? '#64B5F6' : '#1976D2'} />
@@ -234,7 +240,7 @@ export default function HomeScreen() {
             data={sheetComments}
             keyExtractor={(i) => i.id}
             renderItem={({ item }) => (
-              <View style={styles.sheetComment}>
+              <View style={[styles.sheetComment, { backgroundColor: card }]}>
                 <View style={[styles.avatar, { backgroundColor: isDark ? '#42A5F5' : '#1976D2' }]}>
                   <Text style={{ color: '#fff', fontWeight: '800' }}>{item.author.charAt(0)}</Text>
                 </View>
@@ -296,7 +302,7 @@ const styles = StyleSheet.create({
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8 },
   count: { fontSize: 12 },
 
-  sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, top: '30%', backgroundColor: isDark ? '#0F213A' : '#FFFFFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 12 },
+  sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, top: '30%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 12 },
   sheetHeader: { height: 50, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)' },
   sheetTitle: { fontWeight: '800' },
   sheetComment: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },

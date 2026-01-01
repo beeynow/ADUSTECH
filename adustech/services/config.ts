@@ -9,7 +9,7 @@ export const getApiUrl = () => {
   // Uncomment the appropriate line based on your testing environment:
   
   // For iOS Simulator (default):
-  return `${BACKEND_URL}/api/auth`;
+  return `${BACKEND_URL}/api`;
   
   // For Android Emulator:
   // return 'http://10.0.2.2:5000/api/auth';

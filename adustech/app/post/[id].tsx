@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, useColorScheme, Image, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, useColorScheme, Image, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Alert, Pressable, Share } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { postsAPI } from '../../services/postsApi';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import * as Linking from 'expo-linking';
 
 interface CommentItem { id: string; author: string; text: string; likes?: number; liked?: boolean; }
 
 export default function PostDetail() {
+  const lastTapRef = useRef<number>(0);
   const isDark = useColorScheme() === 'dark';
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -33,7 +37,7 @@ export default function PostDetail() {
       }
       try {
         const data = await postsAPI.listComments(id as string);
-        const mapped = (data.comments || []).map((c: any) => ({ id: c._id, author: c.userName, text: c.text, likes: (c.likes||[]).length }));
+        const mapped = (data.comments || []).map((c: any) => ({ id: c._id, author: c.userName, text: c.text, likes: (c.likes||[]).length, liked: false }));
         setComments(mapped);
       } catch (e) {}
     })();
@@ -64,7 +68,55 @@ export default function PostDetail() {
               <View style={[styles.card, { backgroundColor: card }]}> 
                 <Text style={[styles.title, { color: textPrimary }]}>{pTitle}</Text>
                 <Text style={{ color: muted, marginTop: 2 }}>{pAuthor}</Text>
-                {!!pImage && <Image source={{ uri: pImage }} style={styles.image} />}
+                {!!pImage && (
+                  <Pressable
+                    onLongPress={async () => {
+                      try {
+                        if (!pImage) return;
+                        const { status } = await MediaLibrary.requestPermissionsAsync();
+                        if (status !== 'granted') {
+                          Alert.alert('Permission needed', 'Please allow media library access to save images.');
+                          return;
+                        }
+                        const fileName = `post_${id}_${Date.now()}.jpg`;
+                        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+                        const download = await FileSystem.downloadAsync(pImage, fileUri);
+                        const asset = await MediaLibrary.createAssetAsync(download.uri);
+                        await MediaLibrary.createAlbumAsync('ADUSTECH', asset, false).catch(async () => {
+                          await MediaLibrary.saveToLibraryAsync(download.uri);
+                        });
+                        Alert.alert('Saved', 'Image has been saved to your gallery.');
+                      } catch (e: any) {
+                        console.log('Download error', e);
+                        Alert.alert('Error', e?.message || 'Failed to save image');
+                      }
+                    }}
+                    onPress={() => {
+                      // Double-tap detection for share
+                      const now = Date.now();
+                      if (lastTapRef.current && now - lastTapRef.current < 300) {
+                        lastTapRef.current = 0;
+                        // Double tap => share post link (deep link + optional web URL)
+                        try {
+                          const deepLink = Linking.createURL(`/post/${id}`);
+                          const webUrl = `https://adustech.app/post/${id}`; // adjust if you have a real domain
+                          const shareMessage = `${pTitle || 'ADUSTECH post'}\n${webUrl}`;
+                          Share.share({
+                            message: shareMessage,
+                            url: deepLink,
+                            title: 'Share post',
+                          }).catch(() => {});
+                        } catch {
+                          Share.share({ message: pTitle || 'ADUSTECH post' }).catch(() => {});
+                        }
+                      } else {
+                        lastTapRef.current = now;
+                      }
+                    }}
+                  >
+                    <Image source={{ uri: pImage }} style={styles.image} />
+                  </Pressable>
+                )}
                 <Text style={{ color: muted, marginTop: 8 }}>{pContent}</Text>
               </View>
               <Text style={[styles.commentsHeading, { color: textPrimary }]}>Comments</Text>
@@ -83,12 +135,12 @@ export default function PostDetail() {
                 onPress={async () => {
                   try {
                     const res = await postsAPI.toggleLikeComment(id as string, item.id);
-                    setComments(prev => prev.map(c => c.id === item.id ? { ...c, likes: res.likes } : c));
+                    setComments(prev => prev.map(c => c.id === item.id ? { ...c, likes: res.likes, liked: res.liked } : c));
                   } catch {}
                 }}
                 style={{ padding: 8 }}
               >
-                <Ionicons name="heart-outline" size={18} color={isDark ? '#FFCDD2' : '#C62828'} />
+                <Ionicons name={item.liked ? 'heart' : 'heart-outline'} size={18} color={item.liked ? (isDark ? '#FF8A80' : '#E53935') : (isDark ? '#FFCDD2' : '#C62828')} />
                 <Text style={{ color: muted, fontSize: 12, textAlign: 'center' }}>{item.likes || 0}</Text>
               </TouchableOpacity>
             </View>

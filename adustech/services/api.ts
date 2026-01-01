@@ -50,7 +50,7 @@ export const authAPI = {
   register: async (name: string, email: string, password: string) => {
     try {
       console.log('Attempting registration...', { name, email });
-      const response = await api.post('/register', { name, email, password });
+      const response = await api.post('/auth/register', { name, email, password });
       console.log('Registration response:', response.data);
       return { success: true, data: response.data };
     } catch (error: any) {
@@ -65,7 +65,7 @@ export const authAPI = {
   // Verify OTP
   verifyOTP: async (email: string, otp: string) => {
     try {
-      const response = await api.post('/verify-otp', { email, otp });
+      const response = await api.post('/auth/verify-otp', { email, otp });
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 
@@ -78,7 +78,7 @@ export const authAPI = {
   // Resend OTP
   resendOTP: async (email: string) => {
     try {
-      const response = await api.post('/resend-otp', { email });
+      const response = await api.post('/auth/resend-otp', { email });
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 
@@ -91,7 +91,7 @@ export const authAPI = {
   // Login user
   login: async (email: string, password: string) => {
     try {
-      const response = await api.post('/login', { email, password });
+      const response = await api.post('/auth/login', { email, password });
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 
@@ -104,7 +104,7 @@ export const authAPI = {
   // Logout user
   logout: async () => {
     try {
-      const response = await api.post('/logout');
+      const response = await api.post('/auth/logout');
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 
@@ -117,7 +117,7 @@ export const authAPI = {
   // Forgot password - request reset code
   forgotPassword: async (email: string) => {
     try {
-      const response = await api.post('/forgot-password', { email });
+      const response = await api.post('/auth/forgot-password', { email });
       return { success: true, data: response.data };
     } catch (error: any) {
       return {
@@ -130,7 +130,7 @@ export const authAPI = {
   // Reset password with code
   resetPassword: async (email: string, token: string, newPassword: string) => {
     try {
-      const response = await api.post('/reset-password', { email, token, newPassword });
+      const response = await api.post('/auth/reset-password', { email, token, newPassword });
       return { success: true, data: response.data };
     } catch (error: any) {
       return {
@@ -143,7 +143,7 @@ export const authAPI = {
   // Change password (authenticated)
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
-      const response = await api.post('/change-password', { currentPassword, newPassword });
+      const response = await api.post('/auth/change-password', { currentPassword, newPassword });
       return { success: true, data: response.data };
     } catch (error: any) {
       return {
@@ -156,7 +156,7 @@ export const authAPI = {
  // Create admin (power only)
  createAdmin: async (payload: { name: string; email: string; password: string; role: 'admin' | 'd-admin' }) => {
    try {
-     const response = await api.post('/create-admin', payload);
+     const response = await api.post('/auth/create-admin', payload);
      return { success: true, data: response.data };
    } catch (error: any) {
      return { success: false, message: error.response?.data?.message || 'Failed to create admin.' };
@@ -166,7 +166,7 @@ export const authAPI = {
   // List admins (power only)
   listAdmins: async () => {
     try {
-      const response = await api.get('/admins');
+      const response = await api.get('/auth/admins');
       return { success: true, data: response.data };
     } catch (error: any) {
       return { success: false, message: error.response?.data?.message || 'Failed to list admins.' };
@@ -176,7 +176,7 @@ export const authAPI = {
   // Demote admin (power only)
   demoteAdmin: async (email: string) => {
     try {
-      const response = await api.post('/demote-admin', { email });
+      const response = await api.post('/auth/demote-admin', { email });
       return { success: true, data: response.data };
     } catch (error: any) {
       return { success: false, message: error.response?.data?.message || 'Failed to demote admin.' };
@@ -186,7 +186,7 @@ export const authAPI = {
   // Who am I (session check)
   me: async () => {
     try {
-      const response = await api.get('/me');
+      const response = await api.get('/auth/me');
       return { success: true, data: response.data };
     } catch (error: any) {
       return { success: false, message: error.response?.data?.message || 'Not authenticated' };
@@ -196,7 +196,7 @@ export const authAPI = {
   // Get dashboard (protected route)
   getDashboard: async () => {
     try {
-      const response = await api.get('/dashboard');
+      const response = await api.get('/auth/dashboard');
       return { success: true, data: response.data };
     } catch (error: any) {
       return { 

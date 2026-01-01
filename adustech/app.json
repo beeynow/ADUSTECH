@@ -9,18 +9,21 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/plash.png",
       "resizeMode": "contain",
       "backgroundColor": "#E6F4FE"
     },
     "ios": {
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "We use your calendar to add events you choose."
+      },
       "supportsTablet": true,
       "splash": {
-        "image": "./assets/images/splash-icon.png",
+        "image": "./assets/images/plash.png",
         "resizeMode": "contain",
         "backgroundColor": "#E6F4FE",
         "dark": {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/plash.png",
           "backgroundColor": "#0A1929"
         }
       }
@@ -33,11 +36,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "splash": {
-        "image": "./assets/images/splash-icon.png",
+        "image": "./assets/images/plash.png",
         "resizeMode": "contain",
         "backgroundColor": "#E6F4FE",
         "dark": {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/plash.png",
           "backgroundColor": "#0A1929"
         }
       },
@@ -48,7 +51,7 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png",
       "splash": {
-        "image": "./assets/images/splash-icon.png",
+        "image": "./assets/images/plash.png",
         "resizeMode": "contain",
         "backgroundColor": "#E6F4FE"
       }
@@ -58,12 +61,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/plash.png",
           "imageWidth": 300,
           "resizeMode": "contain",
           "backgroundColor": "#E6F4FE",
           "dark": {
-            "image": "./assets/images/splash-icon.png",
+            "image": "./assets/images/plash.png",
             "backgroundColor": "#0A1929"
           }
         }

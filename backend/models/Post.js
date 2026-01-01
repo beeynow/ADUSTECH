@@ -15,6 +15,7 @@ const PostSchema = new mongoose.Schema({
   imageBase64: { type: String, default: '' }, // legacy support
   imageUrl: { type: String, default: '' }, // cloud storage URL
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  reposts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [CommentSchema],
 }, { timestamps: true });
 

@@ -41,10 +41,16 @@ app.use(session({
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const postsRoutes = require('./routes/postsRoutes');
+const channelsRoutes = require('./routes/channelsRoutes');
+const eventsRoutes = require('./routes/eventsRoutes');
+const timetablesRoutes = require('./routes/timetablesRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api', profileRoutes);
 app.use('/api', postsRoutes);
+app.use('/api', channelsRoutes);
+app.use('/api', eventsRoutes);
+app.use('/api', timetablesRoutes);
 
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));

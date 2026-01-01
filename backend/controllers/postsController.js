@@ -83,6 +83,24 @@ exports.toggleLikePost = async (req, res) => {
   }
 };
 
+exports.toggleRepostPost = async (req, res) => {
+  try {
+    const user = req.session.user;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const { id } = req.params;
+    const post = await Post.findById(id);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+    if (!post.reposts) post.reposts = [];
+    const idx = post.reposts.findIndex(u => u.toString() === user.id);
+    if (idx >= 0) post.reposts.splice(idx, 1); else post.reposts.push(user.id);
+    await post.save();
+    res.json({ reposts: post.reposts.length, reposted: idx < 0 });
+  } catch (e) {
+    console.error('toggleRepostPost error', e);
+    res.status(500).json({ message: 'Error toggling repost' });
+  }
+};
+
 exports.addComment = async (req, res) => {
   try {
     const user = req.session.user;
